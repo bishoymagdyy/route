@@ -1,44 +1,14 @@
 [
   {
     "id": 1,
-    "name": "Ahmed Hassan",
-    "age": 25,
-    "email": "ahmed.hassan@example.com"
+    "name": "ali",
+    "age": 40,
+    "email": "ali@example.com"
   },
   {
     "id": 2,
-    "name": "Sara Ali",
-    "age": 30,
-    "email": "sara.ali@example.com"
-  },
-  {
-    "id": 3,
-    "name": "Mark Nader",
-    "age": 22,
-    "email": "mark.nader@example.com"
-  },
-  {
-    "id": 4,
-    "name": "Lina George",
-    "age": 28,
-    "email": "lina.george@example.com"
-  },
-  {
-    "id": 5,
-    "name": "Omar Khaled",
-    "age": 35,
-    "email": "omar.khaled@example.com"
-  },
-  {
-    "id": 6,
-    "name": "Ahmed ali",
-    "age": 28,
-    "email": "ahmed.ali@example.com"
-  },
-  {
-    "id": 7,
-    "name": "reem ali",
-    "age": 20,
-    "email": "reem.ali@example.com"
+    "name": "reem ",
+    "age": 21,
+    "email": "reem@example.com"
   }
 ]

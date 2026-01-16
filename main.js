@@ -1,219 +1,126 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const {createGzip} = require("node:zlib");
-const datapath = path.resolve("data.txt");
-const destpath = path.resolve("copy.txt");
-const destZipPath = path.resolve("copy.txt.gz");
-const zip = createGzip();
+const express = require('express');
+const fs = require('fs');
+const app = express();
 
-// [part 1]  1, 2
+app.use(express.json());
 
+const FILE_PATH = './users.json';
 
-  const readStream = fs.createReadStream(datapath, {encoding: "utf8", highWaterMark: 64});
-  const writeStream = fs.createWriteStream(destpath, {encoding: "utf8"});
-  readStream.on("data", (chunk) => {
-    console.log("----- New Chunk -----");
-    console.log(chunk);
-    writeStream.write(chunk);
-  });
+const readUsers = () => {
+    try {
+        const data = fs.readFileSync(FILE_PATH, 'utf8');
+        return JSON.parse(data || '[]');
+    } catch (err) {
+        return [];
+    }
+};
 
-  readStream.on("end", () => {
-    console.log("Finished reading file in chunks.");
-  });
+const writeUsers = (users) => {
+    fs.writeFileSync(FILE_PATH, JSON.stringify(users, null, 2));
+};
 
-  readStream.on("error", (err) => {
-    console.error("Error while reading file:", err.message);
-  });
+// 1. Add User (POST /user)
+app.post('/user', (req, res) => {
+    const { name, age, email } = req.body;
+    const users = readUsers();
 
-// 3
+    const emailExists = users.find(user => user.email === email);
+    if (emailExists) {
+        return res.json({ message: "Email already exists." });
+    }
 
-const writeZipStream = fs.createWriteStream(destZipPath);
-readStream.pipe(zip).pipe(writeZipStream);
+    const id = users.length > 0 ? users[users.length - 1].id + 1 : 1;
+    const newUser = { id, name, age, email };
+    
+    users.push(newUser);
+    writeUsers(users);
 
-// [part 2]
+    res.json({ message: "User added successfully." });
+});
 
-const http = require("node:http");
-let port = 3000;
+// 2. Update User (PATCH /user/:id)
+app.patch('/user/:id', (req, res) => {
+    const id = parseInt(req.params.id);
+    const updates = req.body;
+    const users = readUsers();
 
-const server = http.createServer((req, res) => {
-  
-  const {method, url} = req;
-  if (method === "GET" && url === "/") {
-    res.writeHead(200, {"Content-Type": "text/plain"});
-    res.write("Hello World!");
-    res.end("");
-  } 
-  
-  
-  else if (method === "POST" && url === "/signup") {
-    let data = "";
+    const userIndex = users.findIndex(user => user.id === id);
 
-    req.on("data", (chunk) => {
-        data += chunk;
-    });
+    if (userIndex === -1) {
+        return res.json({ message: "User ID not found." });
+    }
 
-    req.on("end", async () => {
-        const { id, name, age, email } = JSON.parse(data);
+    users[userIndex] = { ...users[userIndex], ...updates };
+    writeUsers(users);
 
-        let users = [];
+    res.json({ message: "User updated successfully." });
+});
 
-        try {
-            const fileData = await fs.promises.readFile(path.resolve("users.json"), "utf8");
-            users = JSON.parse(fileData);
-        } catch (err) {
-            users = [];
-        }
+// 3. Delete User (DELETE /user/:id)
+app.delete(['/user/:id', '/user'], (req, res) => {
+    let id = req.params.id ? parseInt(req.params.id) : req.body.id;
+    
+    const users = readUsers();
+    const newUsers = users.filter(user => user.id !== id);
 
-        const checkUserExists = users.find((u) => u.id === id);
+    if (users.length === newUsers.length) {
+        return res.json({ message: "User ID not found." });
+    }
 
-        if (checkUserExists) {
-            res.writeHead(409, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ message: "User already exists" }));
-            return;
-        }
+    writeUsers(newUsers);
+    res.json({ message: "User deleted successfully." });
+});
 
-        users.push({ id, name, age, email });
+// 4. Get User by Name (GET /user/getByName)
+app.get('/user/getByName', (req, res) => {
+    const { name } = req.query;
+    const users = readUsers();
+    
+    const user = users.find(u => u.name.toLowerCase() === name.toLowerCase());
 
-        await fs.promises.writeFile(
-            path.resolve("users.json"),
-            JSON.stringify(users, null, 2),
-            "utf8"
-        );
+    if (!user) {
+        return res.json({ message: "User name not found." });
+    }
 
-        res.writeHead(201, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ message: "User added successfully" }));
-    });
-} 
+    res.json(user);
+});
 
+// 6. Filter Users by Min Age (GET /user/filter)
+// Placed before general GET /user to avoid route conflict if structure changes, 
+app.get('/user/filter', (req, res) => {
+    const minAge = parseInt(req.query.minAge);
+    const users = readUsers();
 
-else if (method === "PATCH" && url.startsWith("/user/")) {
-    const id = url.split("/")[2];
-    let data = "";
+    const filteredUsers = users.filter(user => user.age >= minAge);
 
-    req.on("data", (chunk) => (data += chunk));
+    if (filteredUsers.length === 0) {
+        return res.json({ message: "no user found" });
+    }
 
-    req.on("end", async () => {
-      const updates = JSON.parse(data);
+    res.json(filteredUsers);
+});
 
-      try {
-        const fileData = await fs.promises.readFile(
-          path.resolve("users.json"),
-          "utf8"
-        );
+// 7. Get User by ID (GET /user/:id)
+app.get('/user/:id', (req, res) => {
+    const id = parseInt(req.params.id);
+    const users = readUsers();
 
-        let users = JSON.parse(fileData);
-        const index = users.findIndex((u) => String(u.id) === id);
+    const user = users.find(u => u.id === id);
 
-        if (index === -1) {
-          res.writeHead(404, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ message: "User not found" }));
-          return;
-        }
+    if (!user) {
+        return res.json({ message: "User not found." });
+    }
 
-        users[index] = { ...users[index], ...updates };
+    res.json(user);
+});
 
-        await fs.promises.writeFile(
-          path.resolve("users.json"),
-          JSON.stringify(users, null, 2),
-          "utf8"
-        );
+// 5. Get All Users (GET /user)
+app.get('/user', (req, res) => {
+    const users = readUsers();
+    res.json(users);
+});
 
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ message: "User updated", user: users[index] }));
-      } catch (err) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ message: "Internal Server Error" }));
-      }
-    });
-} 
-
-
-else if (method === "DELETE" && url.startsWith("/user/")) {
-    const id = url.split("/")[2];
-
-    fs.readFile(path.resolve("users.json"), "utf8", async (err, fileData) => {
-        if (err) {
-            res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ message: "Internal Server Error" }));
-            return;
-        }
-
-        let users = JSON.parse(fileData);
-
-        const userExists = users.find((u) => String(u.id) === String(id));
-
-        if (!userExists) {
-            res.writeHead(404, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ message: "User not found" }));
-            return;
-        }
-
-        const updatedUsers = users.filter((u) => String(u.id) !== String(id));
-
-        await fs.promises.writeFile(
-            path.resolve("users.json"),
-            JSON.stringify(updatedUsers, null, 2),
-            "utf8"
-        );
-
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ message: "User deleted successfully" }));
-    });
-} 
-
-else if(method === "GET" && url === "/users"){
-    const usersStream = fs.createReadStream(path.resolve("users.json"), {encoding: "utf8"});
-    res.writeHead(200, {"Content-Type": "application/json"});
-    usersStream.on("data", (chunk) => {
-      res.write(chunk);
-    });
-    usersStream.on("end", () => {
-      res.end();
-    });
-  } 
-  
-  
-  else if (method === "GET" && url.startsWith("/user/")) {
-
-    const id = url.split("/")[2];
-
-    fs.readFile(path.resolve("users.json"), "utf8", (err, fileData) => {
-        if (err) {
-            res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ message: "Internal Server Error" }));
-            return;
-        }
-
-        let users = [];
-
-        try {
-            users = JSON.parse(fileData);
-        } catch (parseErr) {
-            res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ message: "Invalid JSON format in file" }));
-            return;
-        }
-
-        const user = users.find(u => String(u.id) === String(id));
-
-        if (!user) {
-            res.writeHead(404, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ message: "User not found" }));
-            return;
-        }
-
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(user));
-    });
-} 
-
-else {
-    res.writeHead(404, {"Content-Type": "text/plain"});
-    res.write("Not Found");
-    res.end();
-  }
-})
-
-server.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+const PORT = 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
